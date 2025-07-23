@@ -1,4 +1,10 @@
 const Cash = require("../models/Cash");
+const {
+  validateBank,
+  validateBalance,
+  validateCurrency,
+} = require("../validation/cashValidation");
+const validateAuth = require("../validation/authValidation");
 
 // GET /api/cash
 const getCash = async (req, res) => {
@@ -86,33 +92,40 @@ const createCash = async (req, res) => {
     });
     console.log("Auth0 ID for creation:", auth0Id);
 
-    // Basic Validation
-    if (!bank || bank.trim() === "") {
-      console.log("Validation Failed: Bank name is required.");
+    // Perform Validation
+    const bankErrors = validateBank(bank);
+    const balanceErrors = validateBalance(balance);
+    const currencyErrors = validateCurrency(currency);
+
+    // Collect all validation errors
+    const errors = [];
+
+    if (bankErrors.length > 0) {
+      errors.push({ bank: bankErrors });
+    }
+    if (balanceErrors.length > 0) {
+      errors.push({ balance: balanceErrors });
+    }
+    if (currencyErrors.length > 0) {
+      errors.push({ currency: currencyErrors });
+    }
+
+    // If there are any validation errors, send a 400 Bad Request response
+    if (errors.length > 0) {
+      generalMessage = [
+        ...bankErrors,
+        ...balanceErrors,
+        ...currencyErrors,
+      ].join(", ");
+      console.log("Validation Failed: ", generalMessage);
       return res
         .status(400)
-        .json({ success: false, message: "Bank name is required!" });
+        .json({ success: false, message: generalMessage, errors });
     }
-    if (typeof balance !== "number" || isNaN(balance)) {
-      console.log("Validation Failed: Balance must be a valid number.");
-      return res
-        .status(400)
-        .json({ success: false, message: "Balance must be a valid number!" });
-    }
-    if (!currency || currency.trim() === "") {
-      console.log("Validation Failed: Currency is required.");
-      return res
-        .status(400)
-        .json({ success: false, message: "Currency is required!" });
-    }
-    if (!auth0Id) {
-      console.error(
-        "ERROR: Owner ID (auth0Id) is missing for createCash! Token might be invalid or middleware not working."
-      );
-      return res.status(401).json({
-        success: false,
-        message: "Authentication error: User ID not available.",
-      });
+
+    const authError = validateAuth(auth0Id);
+    if (authError) {
+      return res.status(401).json({ success: false, message: authError });
     }
 
     // Create cash
