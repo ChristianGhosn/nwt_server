@@ -1,2 +1,47 @@
+# Node.js specific
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnp.js
+.pnp.cjs
+
+# Local development and environment files
 .env
-node_modules
+.env.*.local # For specific local environment files
+.vscode/     # VS Code editor settings
+.idea/       # IntelliJ/WebStorm editor settings
+*.sublime-project
+*.sublime-workspace
+
+# Build artifacts (if not explicitly needed to be copied after a build step)
+dist/
+build/
+out/
+tmp/
+# If you run `npm run build` inside the Dockerfile, these might not be explicitly copied,
+# but it's good practice to list them if they could exist beforehand.
+
+# Version control files
+.git/
+.gitignore
+.gitattributes
+
+# Docker specific files
+Dockerfile
+.dockerignore
+
+# Test and documentation (if not part of the production runtime)
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js
+docs/
+
+# Other common temporary or cache files
+*.log
+*.log.*
+*.pid
+*.orig
+.DS_Store # macOS specific
+Thumbs.db # Windows specific
