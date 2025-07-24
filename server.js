@@ -11,9 +11,7 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 5050;
 
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",")
-  : [];
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN : [];
 
 const corsOptions = {
   origin: (origin, callback) => {
