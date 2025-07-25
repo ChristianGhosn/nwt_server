@@ -25,7 +25,7 @@ const getCash = async (req, res) => {
     }
 
     // Find cash entries belonging to the authenticated user
-    const entries = await Cash.find({ ownerId: auth0Id }); // Sort by creation date, newest first
+    const entries = await Cash.find({ ownerId: auth0Id });
 
     // Calculate total balance for the frontend
     const totalBalance = entries.reduce(

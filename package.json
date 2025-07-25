@@ -19,6 +19,7 @@
     "express-oauth2-jwt-bearer": "^1.6.1",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.4",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "yahoo-finance2": "^2.13.3"
   }
 }

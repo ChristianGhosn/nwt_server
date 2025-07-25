@@ -1,9 +1,15 @@
 const express = require("express");
-const { getETFs } = require("../controllers/etfController");
+const {
+  getTrackedETFs,
+  createTrackedETF,
+} = require("../controllers/etfController");
+const checkJwt = require("../middleware/auth");
 
 const router = express.Router();
 
+router.use(checkJwt);
+
 // Public routes
-router.get("/", getETFs);
+router.route("/").get(getTrackedETFs).post(createTrackedETF);
 
 module.exports = router;
