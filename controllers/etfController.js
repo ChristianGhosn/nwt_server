@@ -3,6 +3,7 @@ const { TrackedEtf } = require("../models/ETF");
 const validateAuth = require("../validation/authValidation");
 const { controllerError } = require("../controllerErrors");
 
+// GET /api/etfs
 const getTrackedETFs = async (req, res) => {
   try {
     const auth0Id = req.auth?.payload?.sub;
@@ -60,6 +61,7 @@ const getTrackedETFs = async (req, res) => {
   }
 };
 
+// POST /api/etfs
 const createTrackedETF = async (req, res) => {
   try {
     const { ticker } = req.body;
@@ -162,12 +164,70 @@ const createTrackedETF = async (req, res) => {
   }
 };
 
+// PUT /api/etfs/:id
 const updateTrackedETF = async (req, res) => {
   console.log("Updating tracked ETF");
 };
 
+// DELETE /api/etfs/:id
 const deleteTrackedETF = async (req, res) => {
-  console.log("Deleting tracked ETF");
+  try {
+    console.log("Deleting tracked ETF");
+    const { id } = req.params;
+    const auth0Id = req.auth?.payload?.sub;
+
+    console.log(`Attempting to delete tracked ETF with ID: ${id}`);
+    console.log("Auth0 ID for delete authorization:", auth0Id);
+
+    if (!auth0Id) {
+      console.error(
+        "Owner ID (auth0Id) is missing for delete! Token might be invalid or middleware not working."
+      );
+      return res
+        .status(401)
+        .json({ message: "Authentication error: User ID not available." });
+    }
+
+    // Find the tracked ETF by ID
+    const trackedETF = await TrackedEtf.findById(id);
+
+    // Check if tracked ETF exists
+    if (!trackedETF) {
+      console.log(`Tracked ETF with ID: ${id} not found for deletion.`);
+      return res.status(404).json({ message: "Tracked ETF not found." });
+    }
+
+    // Check if held units it > 0
+    if (trackedETF.held_units > 0) {
+      console.log(
+        `Tracked ETF, ${trackedETF.ticker} held units are greater than 0.`
+      );
+      return res.status(400).json({
+        message: `Cannot delete ${trackedETF.ticker} because held units are greater than 0.`,
+      });
+    }
+
+    // Authorization check: Ensure the authenticated user owns this entry
+    if (trackedETF.ownerId !== auth0Id) {
+      console.warn(
+        `Unauthorized attempt to delete entry ${id} by user ${auth0Id}. Owner is ${trackedETF.ownerId}.`
+      );
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this cash entry" });
+    }
+
+    await TrackedEtf.deleteOne({ _id: id });
+
+    console.log(`Tracked ETF with ID: ${id} deleted successfully.`);
+    res.status(200).json({ message: "Tracked ETF deleted successfully" });
+  } catch (error) {
+    console.error("Error in deleteTrackedETF:", error);
+    console.error("Error message:", error.message);
+    res
+      .status(500)
+      .json({ message: "Server error during tracked ETF deletion." });
+  }
 };
 
 module.exports = {
