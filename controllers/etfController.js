@@ -65,9 +65,12 @@ const createTrackedETF = async (req, res) => {
     const { ticker } = req.body;
     const auth0Id = req.auth?.payload?.sub;
 
+    const capitalisedTicker = ticker.toUpperCase();
+    console.log(capitalisedTicker);
+
     console.log("--- POST /api/etf START ---");
     console.log("Received data for creation (req.body): ", {
-      ticker,
+      capitalisedTicker,
     });
     console.log("Auth0 ID for creation: ", auth0Id);
 
@@ -76,10 +79,13 @@ const createTrackedETF = async (req, res) => {
       return res.status(401).json({ success: false, message: authError });
     }
 
-    const existingEtf = await TrackedEtf.findOne({ ticker, ownerId: auth0Id });
+    const existingEtf = await TrackedEtf.findOne({
+      ticker: capitalisedTicker,
+      ownerId: auth0Id,
+    });
     if (existingEtf) {
       console.warn(
-        `Attempted to create duplicate ETF for ${auth0Id}: ${ticker}`
+        `Attempted to create duplicate ETF for ${auth0Id}: ${capitalisedTicker}`
       );
       return res.status(409).json({
         success: false,
@@ -88,9 +94,23 @@ const createTrackedETF = async (req, res) => {
       });
     }
 
-    // 1. Create the TrackedEtf document in the database
+    // 1. Fetch live data for the newly created ETF from Yahoo Finance & check if it an ETF
+    const quoteDataArray = await yahooFinance.quote([capitalisedTicker], {
+      fields: ["longName", "regularMarketPrice", "currency"],
+    });
+
+    if (quoteDataArray[0].quoteType !== "ETF") {
+      console.warn(`Ticker ${capitalisedTicker} not an ETF`);
+      return res.status(400).json({
+        success: false,
+        message: `Ticker ${capitalisedTicker} not an ETF.`,
+        errors: { ticker: [`${capitalisedTicker} not an ETF.`] },
+      });
+    }
+
+    // 2. Create the TrackedEtf document in the database
     const newTrackedEtfDoc = await TrackedEtf.create({
-      ticker,
+      ticker: capitalisedTicker,
       ownerId: auth0Id,
       // Initialize other fields if necessary, e.g., held_units: 0, avg_price: 0
       held_units: 0, // Ensure initial units are 0 for a newly tracked ETF
@@ -101,11 +121,6 @@ const createTrackedETF = async (req, res) => {
       "INFO: Tracked ETF entry created in DB: ",
       newTrackedEtfDoc.toObject()
     );
-
-    // 2. Fetch live data for the newly created ETF from Yahoo Finance
-    const quoteDataArray = await yahooFinance.quote([ticker], {
-      fields: ["longName", "regularMarketPrice", "currency"],
-    });
 
     let combinedNewEtfData = newTrackedEtfDoc.toObject(); // Convert Mongoose doc to plain object
 
@@ -124,7 +139,7 @@ const createTrackedETF = async (req, res) => {
       console.log("INFO: Live data fetched and combined for new ETF.");
     } else {
       console.warn(
-        `WARNING: No live quote data found for newly created ticker: ${ticker}`
+        `WARNING: No live quote data found for newly created ticker: ${capitalisedTicker}`
       );
       // If no quote data, still return the basic tracked ETF data
       combinedNewEtfData = {
