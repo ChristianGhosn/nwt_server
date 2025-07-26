@@ -3,7 +3,9 @@ const {
   getTrackedETFs,
   createTrackedETF,
   deleteTrackedETF,
+  updateTrackedETF,
 } = require("../controllers/etfController");
+const asyncHandler = require("../utils/controllerWrapper");
 const checkJwt = require("../middleware/auth");
 
 const router = express.Router();
@@ -11,8 +13,14 @@ const router = express.Router();
 router.use(checkJwt);
 
 // Public routes
-router.route("/").get(getTrackedETFs).post(createTrackedETF);
+router
+  .route("/")
+  .get(asyncHandler(getTrackedETFs))
+  .post(asyncHandler(createTrackedETF));
 
-router.route("/:id").delete(deleteTrackedETF);
+router
+  .route("/:id")
+  .put(asyncHandler(updateTrackedETF))
+  .delete(asyncHandler(deleteTrackedETF));
 
 module.exports = router;

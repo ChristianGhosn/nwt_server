@@ -2,7 +2,7 @@ const validateBank = (input) => {
   const errors = [];
   if (typeof input !== "string") {
     console.log("Validation Failed: Bank name is invalid.");
-    errors.push("Bank name is invalid");
+    errors.push("Bank name input is invalid");
     return errors;
   }
 
