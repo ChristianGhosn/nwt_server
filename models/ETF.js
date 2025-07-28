@@ -68,9 +68,6 @@ const etfTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const TrackedEtf = mongoose.model("TrackedEtf", trackedEtfSchema);
-const EtfTransaction = mongoose.model("EtfTrasnaction", etfTransactionSchema);
-
 // PRESAVE HOOK FOR ORDER VALUE & REMAINING BALANCE
 etfTransactionSchema.pre("save", function (next) {
   if (
@@ -86,8 +83,8 @@ etfTransactionSchema.pre("save", function (next) {
 // Post-save hook to update held_units in trackedETFs
 etfTransactionSchema.post("save", async function (doc) {
   try {
-    const { ticker, units, order_price } = doc;
-    let trackedEtf = await TrackedEtf.findOne({ ticker });
+    const { ticker, units, order_price, ownerId } = doc;
+    let trackedEtf = await TrackedEtf.findOne({ ticker, ownerId });
 
     if (!trackedEtf) {
       // Create a new tracked ETF entry if it doesn't exist
@@ -114,17 +111,14 @@ etfTransactionSchema.post("save", async function (doc) {
       const oldHeldUnits = trackedEtf.held_units;
       const oldAvgPrice = trackedEtf.avg_price;
 
-      trackedEtf.held_units += netUnitsChange;
+      trackedEtf.held_units += units;
 
       // Ensure held_units doesn't go negative if selling more than held
       if (trackedEtf.held_units < 0) {
         console.log(
           `Warning: Held units for ${ticker} went negative (${trackedEtf.held_units}) after transaction.`
         );
-        return res.status(400).json({
-          success: false,
-          message: `Warning: Helf units for ${ticker} went negative after transaction`,
-        });
+        trackedEtf.held_units = oldHeldUnits;
       }
 
       if (units > 0) {
@@ -149,5 +143,8 @@ etfTransactionSchema.post("save", async function (doc) {
     console.error(`Error in post-save hook for ${doc.ticker}:`, error);
   }
 });
+
+const TrackedEtf = mongoose.model("TrackedEtf", trackedEtfSchema);
+const EtfTransaction = mongoose.model("EtfTransaction", etfTransactionSchema);
 
 module.exports = { TrackedEtf, EtfTransaction };

@@ -12,9 +12,6 @@ const {
 const getCash = async (req, res) => {
   const auth0Id = getAuthUserId(req);
 
-  console.log("--- GET /api/cash START ---");
-  console.log("Auth0 ID for fetching cash entries:", auth0Id);
-
   // Find cash entries belonging to the authenticated user
   const entries = await Cash.find({ ownerId: auth0Id });
 
@@ -23,11 +20,6 @@ const getCash = async (req, res) => {
     (acc, doc) => acc + parseFloat(doc.balance || 0),
     0
   );
-
-  console.log(
-    `SUCCESS: Fetched ${entries.length} cash entries for user ${auth0Id}.`
-  );
-  console.log("--- GET /api/cash END ---");
 
   // Respond with both entries and total balance
   res.status(200).json({
@@ -47,14 +39,6 @@ const getCash = async (req, res) => {
 const createCash = async (req, res) => {
   const { balance, bank, currency } = req.body;
   const auth0Id = getAuthUserId(req);
-
-  console.log("--- POST /api/cash START ---");
-  console.log("Received data for creation (req.body):", {
-    balance,
-    bank,
-    currency,
-  });
-  console.log("Auth0 ID for creation:", auth0Id);
 
   // Perform Validation
   const { hasErrors, structuredErrors, flatMessage } =
@@ -78,9 +62,6 @@ const createCash = async (req, res) => {
     ownerId: auth0Id,
   });
 
-  console.log("SUCCESS: Cash entry created:", cash);
-  console.log("--- POST /api/cash END ---");
-
   res.status(201).json(cash); // Use 201 Created for successful resource creation
 };
 
@@ -89,10 +70,6 @@ const updateCash = async (req, res) => {
   const { id } = req.params; // Get the ID from the URL parameters
   const { bank, balance, currency } = req.body; // Get updated data from request body
   const auth0Id = getAuthUserId(req);
-
-  console.log(`--- PUT /api/cash/${id} START ---`);
-  console.log("Received update data:", { bank, balance, currency });
-  console.log("Auth0 ID for update authorization:", auth0Id);
 
   // Find the cash entry by ID
   let cashEntry = await Cash.findById(id);
@@ -134,8 +111,6 @@ const updateCash = async (req, res) => {
   // Save the updated entry
   const updatedCash = await cashEntry.save(); // Mongoose schema validation will also run here
 
-  console.log("Cash entry updated successfully:", updatedCash);
-  console.log(`--- PUT /api/cash/${id} END ---`);
   res.status(200).json(updatedCash);
 };
 
@@ -143,9 +118,6 @@ const updateCash = async (req, res) => {
 const deleteCash = async (req, res) => {
   const { id } = req.params; // Get the ID from the URL parameters
   const auth0Id = getAuthUserId(req);
-
-  console.log(`Attempting to delete cash entry with ID: ${id}`);
-  console.log("Auth0 ID for delete authorization:", auth0Id);
 
   // Find the cash entry by ID
   const cashEntry = await Cash.findById(id);
@@ -162,7 +134,6 @@ const deleteCash = async (req, res) => {
   // Delete the entry
   await Cash.deleteOne({ _id: id }); // Use deleteOne with the _id query
 
-  console.log(`Cash entry with ID: ${id} deleted successfully.`);
   res.status(200).json({ message: "Cash entry deleted successfully" }); // 200 OK with success message
 };
 
