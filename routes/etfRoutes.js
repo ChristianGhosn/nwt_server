@@ -6,6 +6,7 @@ const {
   updateTrackedETF,
   getETFsTransactions,
   createETFTransaction,
+  deleteETFTransaction,
 } = require("../controllers/etfController");
 const asyncHandler = require("../utils/controllerWrapper");
 const checkJwt = require("../middleware/auth");
@@ -29,5 +30,7 @@ router
   .route("/transactions")
   .get(asyncHandler(getETFsTransactions))
   .post(asyncHandler(createETFTransaction));
+
+router.route("/transactions/:id").delete(asyncHandler(deleteETFTransaction));
 
 module.exports = router;

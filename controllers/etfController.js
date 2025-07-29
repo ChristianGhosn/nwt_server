@@ -249,10 +249,44 @@ const getETFsTransactions = async (req, res) => {
   const auth0Id = getAuthUserId(req);
 
   // Fetch ETF transactions from Mongo
-  const etfTransactions = await EtfTransaction.find({ ownerId: auth0Id });
+  const etfTransactions = await EtfTransaction.find({
+    ownerId: auth0Id,
+  }).lean();
 
-  // Return ETF transactions
-  return res.status(200).json(etfTransactions);
+  if (etfTransactions.length > 0) {
+    const tickers = [...new Set(etfTransactions.map((t) => t.ticker))];
+    const quotes = await yahooFinance.quote(tickers);
+
+    const quoteMap = Array.isArray(quotes)
+      ? quotes.reduce((acc, q) => {
+          acc[q.symbol] = q;
+          return acc;
+        }, {})
+      : { [quotes.symbol]: quotes };
+
+    const formattedTransactions = etfTransactions.map((txn) => {
+      const quote = quoteMap[txn.ticker];
+      const livePrice = quote?.regularMarketPrice ?? null;
+
+      return {
+        ...txn,
+        order_date: txn.order_date
+          ? txn.order_date.toISOString().split("T")[0]
+          : null,
+        live_price: livePrice,
+        live_value: livePrice ? livePrice * txn.units : null,
+        order_value: txn.units * txn.order_price,
+        capital_gains_$: livePrice ? livePrice - txn.order_price : null,
+        "capital_gains_%": livePrice
+          ? ((livePrice - txn.order_price) / txn.order_price) * 100
+          : null,
+      };
+    });
+
+    return res.status(200).json(formattedTransactions);
+  } else {
+    return res.status(200).json([]);
+  }
 };
 
 // POST /api/etfs/transactions
@@ -279,36 +313,225 @@ const createETFTransaction = async (req, res) => {
 
   // Validate ETF
   try {
-    await fetchAndValidateETFQuote(capitalisedTicker);
+    // Validate ETF and fetch live quote
+    const quote = await fetchAndValidateETFQuote(capitalisedTicker);
+
+    // Create ETF Transaction
+    const etfTransaction = await EtfTransaction.create({
+      ticker: capitalisedTicker,
+      order_date,
+      units,
+      order_price,
+      brokerage,
+      order_value: units * order_price,
+      ownerId: auth0Id,
+    });
+
+    const transactionObject = etfTransaction.toObject();
+
+    // Prepare the combined ETF transaction object for the response
+    const combinedEtfTransaction = {
+      ...transactionObject,
+      live_price: quote.regularMarketPrice,
+      live_value: quote.regularMarketPrice * units,
+      capital_gains_$: quote.regularMarketPrice - order_price,
+      "capital_gains_%":
+        ((quote.regularMarketPrice - order_price) / order_price) * 100,
+    };
+
+    // Fetch trackedETF entry from Mongo
+    let trackedEtf = await TrackedEtf.findOne({
+      ticker: capitalisedTicker,
+      ownerId: auth0Id,
+    });
+
+    if (!trackedEtf) {
+      // If no tracked ETF exists for this ticker and owner, create a new one if its a buy order
+      if (units > 0) {
+        trackedEtf = new TrackedEtf({
+          ticker: capitalisedTicker,
+          held_units: units,
+          avg_price: order_price,
+          ownerId: auth0Id,
+        });
+
+        await trackedEtf.save();
+      } else {
+        // If it's a sell order for an ETF that isn't currently tracked, return an error
+        throw new Error(
+          `Cannot sell ${capitalisedTicker}. You do not currently track this ETF.`
+        );
+      }
+    } else {
+      // If a tracked ETF already exists, update its held_units and avg_price
+      const oldHeldUnits = trackedEtf.held_units;
+      const oldAvgPrice = trackedEtf.avg_price;
+
+      // Update held units
+      trackedEtf.held_units += units;
+      if (trackedEtf.held_units < 0) {
+        // If the held units go below 0, return an error
+        trackedEtf.held_units = oldHeldUnits;
+        throw new Error(
+          `Cannot sell ${Math.abs(
+            units
+          )} units of ${capitalisedTicker}. You only hold ${oldHeldUnits} units.`
+        );
+      } else {
+        // Only update average price for purchase transactions (units > 0)
+        if (units > 0) {
+          const totalCostOld = oldHeldUnits * oldAvgPrice;
+          const totalCostNew = units * order_price;
+          const totalUnitsOldAndNew = oldHeldUnits + units;
+          if (totalUnitsOldAndNew > 0) {
+            trackedEtf.avg_price =
+              (totalCostOld + totalCostNew) / totalUnitsOldAndNew;
+          } else {
+            // If total units become 0 after a purchase (unlikely, but for completeness)
+            trackedEtf.avg_price = 0;
+          }
+        } else if (units < 0 && trackedEtf.held_units === 0) {
+          trackedEtf.avg_price = 0;
+        }
+      }
+      // Save the updated trackedEtf document
+      await trackedEtf.save();
+    }
+
+    const finalTrackedEtf = {
+      ...trackedEtf.toObject(),
+      fund_name: quote.longName,
+      currency: quote.currency,
+      live_price: quote.regularMarketPrice,
+      live_value: quote.regularMarketPrice * trackedEtf.held_units,
+    };
+
+    return res.status(200).json({
+      etfTransaction: combinedEtfTransaction,
+      trackedEtf: finalTrackedEtf,
+    });
   } catch (err) {
     return formatErrorResponse(res, 400, err.message, {
       ticker: [err.message],
     });
   }
-
-  // Create ETF Transaction
-  const etfTransaction = await EtfTransaction.create({
-    ticker: capitalisedTicker,
-    order_date,
-    units,
-    order_price,
-    brokerage,
-    order_value: units * order_price,
-    ownerId: auth0Id,
-  });
-
-  // Return object
-  return res.status(200).json(etfTransaction);
-};
-
-// PUT /api/etfs/transactions/:id
-const updateETFTransaction = async (req, res) => {
-  console.log("Updating ETF Transaction");
 };
 
 // DELETE /api/etfs/transactions/:id
 const deleteETFTransaction = async (req, res) => {
-  console.log("Deleting ETF Transaction");
+  const { id } = req.params;
+  const auth0Id = getAuthUserId(req);
+
+  try {
+    // 1. Find the transaction to be deleted and verify ownership
+    const etfTransactionToDelete = await EtfTransaction.findOne({
+      _id: id,
+      ownerId: auth0Id,
+    });
+
+    if (!etfTransactionToDelete) {
+      return formatErrorResponse(
+        res,
+        404,
+        "ETF transaction not found or unauthorised."
+      );
+    }
+
+    // 2. Find the corresponding TrackedEtf
+    let trackedEtf = await TrackedEtf.findOne({
+      ticker: etfTransactionToDelete.ticker,
+      ownerId: auth0Id,
+    });
+
+    let finalTrackedEtf = null;
+
+    if (!trackedEtf) {
+      // This scenario implies a data inconsistency
+      console.warn(
+        `TrackedEtf not found for ticker ${etfTransactionToDelete.ticker} and owner ${auth0Id} during transaction deletion.`
+      );
+    } else {
+      // 3. Reverse the effect of the transaction on the trackedEtf
+      const oldHeldUnits = trackedEtf.held_units;
+      const oldAvgPrice = trackedEtf.avg_price;
+      const transactionUnits = etfTransactionToDelete.units;
+      const transactionOrderPrice = etfTransactionToDelete.order_price;
+
+      if (transactionUnits > 0) {
+        // This was a BUY transaction, so we need to subtract units and recalculate avg_price
+        const newHeldUnits = oldHeldUnits - transactionUnits;
+
+        if (newHeldUnits < 0) {
+          // This indicates an inconsistency: trying to delete a buy that would result in negative units.
+          // This could happen if subsequent sells were recorded that shouldn't have been possible.
+          console.warn(
+            `Deleting buy transaction would make held_units negative for ${trackedEtf.ticker}. Held ${oldHeldUnits}, Deleting: ${transactionUnits}. Reverting held units to original.`
+          );
+          trackedEtf.held_units = oldHeldUnits;
+          throw new Error(
+            "Cannot delete transaction: it would lead to negative held units."
+          );
+        } else {
+          trackedEtf.held_units = newHeldUnits;
+          // Recalculate average price
+          const totalValueBeforeTransaction = oldHeldUnits * oldAvgPrice;
+          const valueToRemove = transactionUnits * transactionOrderPrice;
+          const newTotalValue = totalValueBeforeTransaction - valueToRemove;
+
+          trackedEtf.avg_price =
+            newHeldUnits > 0 ? newTotalValue / newHeldUnits : 0;
+        }
+      } else if (transactionUnits < 0) {
+        // This was a SELL transaction, so we need to add units back (units are negative, so subtract a negative)
+        trackedEtf.held_units -= transactionUnits; // Adds the absolute value of units
+        // Average price remains unchanged for sell transactions
+      }
+
+      // Save the updated trackedEtf
+      await trackedEtf.save();
+
+      // 4. Prepare the trackedEtf object to be consistent with getTrackedETFs
+      // Fetch additional live data for the updated trackedEtf
+      const latestQuoteData = await yahooFinance.quote(trackedEtf.ticker, {
+        fields: ["longName", "regularMarketPrice", "currency"],
+      });
+
+      const matchingQuote = latestQuoteData; // For a single ticker, the result is directly the quote object
+
+      if (matchingQuote) {
+        finalTrackedEtf = {
+          ...trackedEtf.toObject(), // Convert Mongoose document to plain JavaScript object
+          fund_name: matchingQuote.longName,
+          currency: matchingQuote.currency,
+          live_price: matchingQuote.regularMarketPrice,
+          live_value: matchingQuote.regularMarketPrice * trackedEtf.held_units,
+        };
+      } else {
+        console.warn(
+          `No live quote data found for updated tracked ETF: ${trackedEtf.ticker}`
+        );
+        finalTrackedEtf = trackedEtf.toObject(); // Fallback to just the saved data
+      }
+    }
+
+    // 5. Delete the ETF transaction
+    await EtfTransaction.deleteOne({ _id: id });
+
+    // 6. Return success response
+    return res.status(200).json({
+      success: true,
+      message: "ETF transaction deleted successfully.",
+      deletedTransactionId: id,
+      trackedEtf: finalTrackedEtf,
+    });
+  } catch (err) {
+    return formatErrorResponse(
+      res,
+      500,
+      "Failed to delete ETF transaction.",
+      err
+    );
+  }
 };
 
 module.exports = {
@@ -318,6 +541,5 @@ module.exports = {
   deleteTrackedETF,
   getETFsTransactions,
   createETFTransaction,
-  updateETFTransaction,
   deleteETFTransaction,
 };
