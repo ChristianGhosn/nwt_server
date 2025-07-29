@@ -318,7 +318,7 @@ const createETFTransaction = async (req, res) => {
     const quote = await fetchAndValidateETFQuote(capitalisedTicker);
 
     // Create ETF Transaction
-    const etfTransaction = new EtfTransaction({
+    const etfTransaction = await EtfTransaction.create({
       action,
       ticker: capitalisedTicker,
       order_date,
@@ -454,12 +454,13 @@ const deleteETFTransaction = async (req, res) => {
       );
     } else {
       // 3. Reverse the effect of the transaction on the trackedEtf
+      const action = trackedEtf.action;
       const oldHeldUnits = trackedEtf.held_units;
       const oldAvgPrice = trackedEtf.avg_price;
       const transactionUnits = etfTransactionToDelete.units;
       const transactionOrderPrice = etfTransactionToDelete.order_price;
 
-      if (transactionUnits > 0) {
+      if (action === "buy") {
         // This was a BUY transaction, so we need to subtract units and recalculate avg_price
         const newHeldUnits = oldHeldUnits - transactionUnits;
 
@@ -483,7 +484,7 @@ const deleteETFTransaction = async (req, res) => {
           trackedEtf.avg_price =
             newHeldUnits > 0 ? newTotalValue / newHeldUnits : 0;
         }
-      } else if (transactionUnits < 0) {
+      } else if (action === "sell") {
         // This was a SELL transaction, so we need to add units back (units are negative, so subtract a negative)
         trackedEtf.held_units -= transactionUnits; // Adds the absolute value of units
         // Average price remains unchanged for sell transactions
