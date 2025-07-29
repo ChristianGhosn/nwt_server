@@ -36,6 +36,11 @@ const trackedEtfSchema = new mongoose.Schema(
 
 const etfTransactionSchema = new mongoose.Schema(
   {
+    action: {
+      type: String,
+      required: true,
+      enum: ["buy", "sell"],
+    },
     ticker: {
       type: String,
       required: true,

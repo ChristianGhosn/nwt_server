@@ -1,3 +1,23 @@
+const validateAction = (input) => {
+  const errors = [];
+  if (typeof input !== "string") {
+    console.log("Validation Failed: Action is an invalid input.");
+    errors.push("Action input is invalid");
+    return errors;
+  }
+
+  if (!input || input.trim() === "") {
+    console.log("Validation Failed: Action is required");
+    errors.push("Action is required");
+  }
+
+  if (input !== "buy" && input !== "sell") {
+    console.log("Validation Failed: Action must be buy or sell");
+    errors.push("Action must be buy or sell");
+  }
+  return errors;
+};
+
 const validateTicker = (input) => {
   const errors = [];
   if (typeof input !== "string") {
@@ -52,6 +72,10 @@ const validateUnits = (input) => {
     console.log("Validation Failed: Units must be a valid number.");
     errors.push("Units must be a valid number");
   }
+  if (input <= 0) {
+    console.log("Validation Failed: Units must greater than 0.");
+    errors.push("Units must greater than 0");
+  }
   return errors;
 };
 
@@ -74,6 +98,7 @@ const validateBrokerage = (input) => {
 };
 
 module.exports = {
+  validateAction,
   validateTicker,
   validateTargetAllocation,
   validateManagementFee,

@@ -11,6 +11,7 @@ const {
   validateUnits,
   validateOrderPrice,
   validateBrokerage,
+  validateAction,
 } = require("../validators/etfValidation");
 const {
   formatErrorResponse,
@@ -291,13 +292,15 @@ const getETFsTransactions = async (req, res) => {
 
 // POST /api/etfs/transactions
 const createETFTransaction = async (req, res) => {
-  const { ticker, order_date, units, order_price, brokerage } = req.body;
+  const { action, ticker, order_date, units, order_price, brokerage } =
+    req.body;
   const auth0Id = getAuthUserId(req);
   const capitalisedTicker = normalizeTicker(ticker);
 
   // Perform Validation
   const { hasErrors, structuredErrors, flatMessage } =
     aggregateValidationErrors({
+      action: validateAction(action),
       ticker: validateTicker(capitalisedTicker),
       order_date: validateOrderDate(order_date),
       units: validateUnits(units),
@@ -310,14 +313,13 @@ const createETFTransaction = async (req, res) => {
       .status(400)
       .json({ success: false, message: flatMessage, errors: structuredErrors });
   }
-
-  // Validate ETF
   try {
-    // Validate ETF and fetch live quote
+    // Validate ETF
     const quote = await fetchAndValidateETFQuote(capitalisedTicker);
 
     // Create ETF Transaction
-    const etfTransaction = await EtfTransaction.create({
+    const etfTransaction = new EtfTransaction({
+      action,
       ticker: capitalisedTicker,
       order_date,
       units,
@@ -347,7 +349,7 @@ const createETFTransaction = async (req, res) => {
 
     if (!trackedEtf) {
       // If no tracked ETF exists for this ticker and owner, create a new one if its a buy order
-      if (units > 0) {
+      if (action === "buy") {
         trackedEtf = new TrackedEtf({
           ticker: capitalisedTicker,
           held_units: units,
@@ -356,7 +358,7 @@ const createETFTransaction = async (req, res) => {
         });
 
         await trackedEtf.save();
-      } else {
+      } else if (action === "sell") {
         // If it's a sell order for an ETF that isn't currently tracked, return an error
         throw new Error(
           `Cannot sell ${capitalisedTicker}. You do not currently track this ETF.`
@@ -367,37 +369,37 @@ const createETFTransaction = async (req, res) => {
       const oldHeldUnits = trackedEtf.held_units;
       const oldAvgPrice = trackedEtf.avg_price;
 
-      // Update held units
-      trackedEtf.held_units += units;
-      if (trackedEtf.held_units < 0) {
+      if (action === "buy") {
+        // Update units
+        trackedEtf.held_units += units;
+
+        // Update avg price
+        const totalCostOld = oldHeldUnits * oldAvgPrice;
+        const totalCostNew = units * order_price;
+        const totalUnitsOldAndNew = oldHeldUnits + units;
+
+        trackedEtf.avg_price =
+          (totalCostOld + totalCostNew) / totalUnitsOldAndNew;
+      } else if (action === "sell") {
         // If the held units go below 0, return an error
-        trackedEtf.held_units = oldHeldUnits;
-        throw new Error(
-          `Cannot sell ${Math.abs(
-            units
-          )} units of ${capitalisedTicker}. You only hold ${oldHeldUnits} units.`
-        );
-      } else {
-        // Only update average price for purchase transactions (units > 0)
-        if (units > 0) {
-          const totalCostOld = oldHeldUnits * oldAvgPrice;
-          const totalCostNew = units * order_price;
-          const totalUnitsOldAndNew = oldHeldUnits + units;
-          if (totalUnitsOldAndNew > 0) {
-            trackedEtf.avg_price =
-              (totalCostOld + totalCostNew) / totalUnitsOldAndNew;
-          } else {
-            // If total units become 0 after a purchase (unlikely, but for completeness)
-            trackedEtf.avg_price = 0;
-          }
-        } else if (units < 0 && trackedEtf.held_units === 0) {
-          trackedEtf.avg_price = 0;
+        if (units > oldHeldUnits) {
+          throw new Error(
+            `Cannot sell ${units} units of ${capitalisedTicker}. You only hold ${oldHeldUnits} units.`
+          );
         }
+
+        // Update units
+        trackedEtf.held_units -= units;
+
+        // If total units become 0 after a sale, set avg_price to 0
+        if (trackedEtf.held_units === 0) trackedEtf.avg_price = 0;
       }
-      // Save the updated trackedEtf document
+
+      // Save trackEtf data
       await trackedEtf.save();
     }
 
+    // Prepare trackedEtf for response
     const finalTrackedEtf = {
       ...trackedEtf.toObject(),
       fund_name: quote.longName,
