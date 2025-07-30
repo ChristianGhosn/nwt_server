@@ -1,4 +1,4 @@
-async function applyFifoSell({ model, ticker, units, ownerId }) {
+async function applyFifoSell({ model, ticker, units, ownerId, sellPrice }) {
   let unitsToSell = units;
   const matchedLots = [];
 
@@ -17,8 +17,19 @@ async function applyFifoSell({ model, ticker, units, ownerId }) {
     const available = buy.remaining_units;
     const toDeduct = Math.min(available, unitsToSell);
 
+    const gainPerUnit = sellPrice - buy.order_price;
+    const gainTotal = gainPerUnit * toDeduct;
+
+    console.log({
+      capital_gains: gainTotal,
+    });
+
     await model.findByIdAndUpdate(buy._id, {
-      $inc: { remaining_units: -toDeduct },
+      $inc: {
+        remaining_units: -toDeduct,
+        sold_units: toDeduct,
+        capital_gains: gainTotal,
+      },
     });
 
     matchedLots.push({
@@ -26,6 +37,8 @@ async function applyFifoSell({ model, ticker, units, ownerId }) {
       matchedUnits: toDeduct,
       buyPrice: buy.order_price,
       buyDate: buy.order_date,
+      gainPerUnit,
+      gainTotal,
     });
 
     unitsToSell -= toDeduct;
@@ -38,3 +51,5 @@ async function applyFifoSell({ model, ticker, units, ownerId }) {
   }
   return matchedLots;
 }
+
+module.exports = applyFifoSell;

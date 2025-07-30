@@ -67,12 +67,13 @@ const etfTransactionSchema = new mongoose.Schema(
     },
     order_value: {
       type: Number,
-      required: false,
+      default: 0,
     },
     remaining_units: {
       type: Number,
-      required: false,
+      default: 0,
     },
+    capital_gains: { type: Number, default: 0 },
     ownerId: {
       type: String,
       required: true,
