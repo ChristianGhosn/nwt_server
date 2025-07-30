@@ -61,9 +61,17 @@ const etfTransactionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    sold_units: {
+      type: Number,
+      default: 0,
+    },
     order_value: {
       type: Number,
-      required: true,
+      required: false,
+    },
+    remaining_units: {
+      type: Number,
+      required: false,
     },
     ownerId: {
       type: String,
@@ -73,7 +81,7 @@ const etfTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// PRESAVE HOOK FOR ORDER VALUE & REMAINING BALANCE
+// PRESAVE HOOK FOR ORDER VALUE, REMAINING BALANCE & REMAINING_UNITS (buy transaction)
 etfTransactionSchema.pre("save", function (next) {
   if (
     this.isModified("units") ||
@@ -82,6 +90,12 @@ etfTransactionSchema.pre("save", function (next) {
   ) {
     this.order_value = Math.abs(this.units * this.order_price);
   }
+
+  // Only set remaining_units on creation for "buy" transactions
+  if (this.isNew && this.action === "buy") {
+    this.remaining_units = this.units;
+  }
+
   next();
 });
 

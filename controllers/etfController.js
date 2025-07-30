@@ -325,7 +325,6 @@ const createETFTransaction = async (req, res) => {
       units,
       order_price,
       brokerage,
-      order_value: units * order_price,
       ownerId: auth0Id,
     });
 
@@ -485,7 +484,7 @@ const deleteETFTransaction = async (req, res) => {
             newHeldUnits > 0 ? newTotalValue / newHeldUnits : 0;
         }
       } else if (action === "sell") {
-        // This was a SELL transaction, so we need to add units back (units are negative, so subtract a negative)
+        // This was a SELL transaction, so we need to add units back
         trackedEtf.held_units += transactionUnits; // Adds the absolute value of units
         // Average price remains unchanged for sell transactions
       }
