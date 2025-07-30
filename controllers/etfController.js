@@ -268,7 +268,6 @@ const getETFsTransactions = async (req, res) => {
       : { [quotes.symbol]: quotes };
 
     const formattedTransactions = etfTransactions.map((txn) => {
-      console.log(txn);
       const quote = quoteMap[txn.ticker];
       const livePrice = quote?.regularMarketPrice ?? null;
 
@@ -331,21 +330,24 @@ const createETFTransaction = async (req, res) => {
       ownerId: auth0Id,
     });
 
-    const transactionObject = etfTransaction.toObject();
-
-    // Prepare the combined ETF transaction object for the response
-    const combinedEtfTransaction = {
-      ...transactionObject,
-      live_price: quote.regularMarketPrice,
-      live_value: quote.regularMarketPrice * units,
-      capital_gains_$: quote.regularMarketPrice - order_price,
-      "capital_gains_%":
-        ((quote.regularMarketPrice - order_price) / order_price) * 100,
-    };
-
     let trackedEtf = null;
 
+    let updatedTransactions = [];
+
     if (action === "buy") {
+      const transactionObject = etfTransaction.toObject();
+
+      updatedTransactions = [
+        {
+          ...transactionObject,
+          live_price: quote.regularMarketPrice,
+          live_value: quote.regularMarketPrice * units,
+          capital_gains_$: quote.regularMarketPrice - order_price,
+          "capital_gains_%":
+            ((quote.regularMarketPrice - order_price) / order_price) * 100,
+        },
+      ];
+
       trackedEtf = await handleBuyAsset({
         TrackedAssetModel: TrackedEtf,
         ticker: capitalisedTicker,
@@ -354,30 +356,78 @@ const createETFTransaction = async (req, res) => {
         ownerId: auth0Id,
       });
     } else if (action === "sell") {
-      const result = await handleSellAsset({
-        TrackedAssetModel: TrackedEtf,
-        TransactionModel: EtfTransaction,
-        ticker: capitalisedTicker,
-        units,
-        order_price,
-        ownerId: auth0Id,
+      const { updatedBuyTransactions, updatedSellTransaction, trackedAsset } =
+        await handleSellAsset({
+          TrackedAssetModel: TrackedEtf,
+          TransactionModel: EtfTransaction,
+          ticker: capitalisedTicker,
+          units,
+          order_price,
+          sellTransactionId: etfTransaction._id,
+          ownerId: auth0Id,
+        });
+
+      trackedEtf = trackedAsset;
+
+      updatedTransactions = [
+        ...updatedBuyTransactions,
+        updatedSellTransaction,
+      ].map((txn) => {
+        const base = txn.toObject();
+
+        const isSell = base.action === "sell";
+
+        if (isSell) {
+          // Only return relevant fields for sell transactions
+          const {
+            _id,
+            ticker,
+            order_date,
+            order_price,
+            units,
+            brokerage,
+            action,
+            capital_gains,
+          } = base;
+
+          return {
+            _id,
+            ticker,
+            order_date,
+            order_price,
+            units,
+            brokerage,
+            action,
+            capital_gains,
+          };
+        }
+
+        // For buy transactions, include all detailed computed fields
+        return {
+          ...base,
+          live_price: quote.regularMarketPrice,
+          live_value: quote.regularMarketPrice * base.units,
+          capital_gains_$: quote.regularMarketPrice - base.order_price,
+          "capital_gains_%":
+            ((quote.regularMarketPrice - base.order_price) / base.order_price) *
+            100,
+        };
       });
-      trackedEtf = result.trackedAsset;
+
+      // Prepare trackedEtf for response
+      const finalTrackedEtf = {
+        ...trackedEtf.toObject(),
+        fund_name: quote.longName,
+        currency: quote.currency,
+        live_price: quote.regularMarketPrice,
+        live_value: quote.regularMarketPrice * trackedEtf.held_units,
+      };
+
+      return res.status(200).json({
+        transactions: updatedTransactions,
+        trackedEtf: finalTrackedEtf,
+      });
     }
-
-    // Prepare trackedEtf for response
-    const finalTrackedEtf = {
-      ...trackedEtf.toObject(),
-      fund_name: quote.longName,
-      currency: quote.currency,
-      live_price: quote.regularMarketPrice,
-      live_value: quote.regularMarketPrice * trackedEtf.held_units,
-    };
-
-    return res.status(200).json({
-      etfTransaction: combinedEtfTransaction,
-      trackedEtf: finalTrackedEtf,
-    });
   } catch (err) {
     return formatErrorResponse(res, 400, err.message, {
       ticker: [err.message],

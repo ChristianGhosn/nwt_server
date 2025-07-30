@@ -1,6 +1,14 @@
-async function applyFifoSell({ model, ticker, units, ownerId, sellPrice }) {
+async function applyFifoSell({
+  model,
+  ticker,
+  units,
+  ownerId,
+  sellPrice,
+  sellTransactionId,
+}) {
   let unitsToSell = units;
   const matchedLots = [];
+  const updatedBuyTransactionIds = [];
 
   const buyTransactions = await model
     .find({
@@ -11,6 +19,8 @@ async function applyFifoSell({ model, ticker, units, ownerId, sellPrice }) {
     })
     .sort({ order_date: 1 });
 
+  let totalCapitalGains = 0;
+
   for (const buy of buyTransactions) {
     if (unitsToSell === 0) break;
 
@@ -19,16 +29,20 @@ async function applyFifoSell({ model, ticker, units, ownerId, sellPrice }) {
 
     const gainPerUnit = sellPrice - buy.order_price;
     const gainTotal = gainPerUnit * toDeduct;
-
-    console.log({
-      capital_gains: gainTotal,
-    });
+    totalCapitalGains += gainTotal;
 
     await model.findByIdAndUpdate(buy._id, {
       $inc: {
         remaining_units: -toDeduct,
         sold_units: toDeduct,
-        capital_gains: gainTotal,
+      },
+      $push: {
+        linked_sells: {
+          sellTransactionId,
+          matchedUnits: toDeduct,
+          gainPerUnit,
+          gainTotal,
+        },
       },
     });
 
@@ -42,14 +56,39 @@ async function applyFifoSell({ model, ticker, units, ownerId, sellPrice }) {
     });
 
     unitsToSell -= toDeduct;
-
-    if (unitsToSell > 0) {
-      throw new Error(
-        "Not enough buy units available to match the sell order (FIFO)."
-      );
-    }
+    updatedBuyTransactionIds.push(buy._id);
   }
-  return matchedLots;
+
+  if (unitsToSell > 0) {
+    throw new Error(
+      "Not enough buy units available to match the sell order (FIFO)."
+    );
+  }
+
+  // Update the sell transaction with linked buys
+  await model.findByIdAndUpdate(sellTransactionId, {
+    $set: {
+      linked_buys: matchedLots.map((lot) => ({
+        buyTransactionId: lot.buyTransactionId,
+        matchedUnits: lot.matchedUnits,
+        gainPerUnit: lot.gainPerUnit,
+        gainTotal: lot.gainTotal,
+      })),
+      capital_gains: totalCapitalGains,
+    },
+  });
+
+  // Fetch full updated buy transactions
+  const updatedBuyTransactions = await model.find({
+    _id: { $in: updatedBuyTransactionIds },
+  });
+
+  const updatedSellTransaction = await model.findById(sellTransactionId);
+
+  return {
+    updatedBuyTransactions,
+    updatedSellTransaction,
+  };
 }
 
 module.exports = applyFifoSell;

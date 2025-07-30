@@ -6,6 +6,7 @@ async function handleSellAsset({
   ticker,
   units,
   order_price,
+  sellTransactionId,
   ownerId,
 }) {
   if (
@@ -43,20 +44,21 @@ async function handleSellAsset({
 
   await trackedAsset.save();
 
-  console.log("Preparing to applyFifoSell");
-
   // Apply FIFO to deduct from buy transactions
-  const matchedLots = await applyFifoSell({
-    model: TransactionModel,
-    ticker,
-    units,
-    ownerId,
-    sellPrice: order_price,
-  });
+  const { updatedSellTransaction, updatedBuyTransactions } =
+    await applyFifoSell({
+      model: TransactionModel,
+      ticker,
+      units,
+      ownerId,
+      sellPrice: order_price,
+      sellTransactionId,
+    });
 
   return {
     trackedAsset,
-    matchedLots,
+    updatedSellTransaction,
+    updatedBuyTransactions,
   };
 }
 

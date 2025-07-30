@@ -41,43 +41,38 @@ const etfTransactionSchema = new mongoose.Schema(
       required: true,
       enum: ["buy", "sell"],
     },
-    ticker: {
-      type: String,
-      required: true,
-    },
-    order_date: {
-      type: Date,
-      default: Date.now,
-    },
-    units: {
-      type: Number,
-      required: true,
-    },
-    order_price: {
-      type: Number,
-      required: true,
-    },
-    brokerage: {
-      type: Number,
-      default: 0,
-    },
-    sold_units: {
-      type: Number,
-      default: 0,
-    },
-    order_value: {
-      type: Number,
-      default: 0,
-    },
-    remaining_units: {
-      type: Number,
-      default: 0,
-    },
+    ticker: { type: String, required: true },
+    order_date: { type: Date, default: Date.now },
+    units: { type: Number, required: true },
+    order_price: { type: Number, required: true },
+    brokerage: { type: Number, default: 0 },
+    sold_units: { type: Number, default: 0 },
+    order_value: { type: Number, default: 0 },
+    remaining_units: { type: Number, default: 0 },
     capital_gains: { type: Number, default: 0 },
-    ownerId: {
-      type: String,
-      required: true,
-    },
+    ownerId: { type: String, required: true },
+    linked_buys: [
+      {
+        buyTransactionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "EtfTransaction",
+        },
+        matchedUnits: Number,
+        gainPerUnit: Number,
+        gainTotal: Number,
+      },
+    ],
+    linked_sells: [
+      {
+        sellTransactionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "EtfTransaction",
+        },
+        matchedUnits: Number,
+        gainPerUnit: Number,
+        gainTotal: Number,
+      },
+    ],
   },
   { timestamps: true }
 );
