@@ -454,7 +454,7 @@ const deleteETFTransaction = async (req, res) => {
       );
     } else {
       // 3. Reverse the effect of the transaction on the trackedEtf
-      const action = trackedEtf.action;
+      const action = etfTransactionToDelete.action;
       const oldHeldUnits = trackedEtf.held_units;
       const oldAvgPrice = trackedEtf.avg_price;
       const transactionUnits = etfTransactionToDelete.units;
@@ -486,7 +486,7 @@ const deleteETFTransaction = async (req, res) => {
         }
       } else if (action === "sell") {
         // This was a SELL transaction, so we need to add units back (units are negative, so subtract a negative)
-        trackedEtf.held_units -= transactionUnits; // Adds the absolute value of units
+        trackedEtf.held_units += transactionUnits; // Adds the absolute value of units
         // Average price remains unchanged for sell transactions
       }
 
