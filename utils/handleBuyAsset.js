@@ -2,10 +2,10 @@ async function handleBuyAsset({
   TrackedAssetModel,
   ticker,
   units,
-  order_price,
+  orderPrice,
   ownerId,
 }) {
-  if (!TrackedAssetModel || !ticker || !units || !order_price || !ownerId) {
+  if (!TrackedAssetModel || !ticker || !units || !orderPrice || !ownerId) {
     throw new Error("Missing required arguments to handleBuyTransaction");
   }
 
@@ -18,21 +18,21 @@ async function handleBuyAsset({
     // First-time buy — create new tracked asset
     trackedAsset = new TrackedAssetModel({
       ticker,
-      held_units: units,
-      avg_price: order_price,
+      heldUnits: units,
+      avgPrice: orderPrice,
       ownerId,
     });
   } else {
     // Update existing tracked asset
-    const oldHeldUnits = trackedAsset.held_units;
-    const oldAvgPrice = trackedAsset.avg_price;
+    const oldHeldUnits = trackedAsset.heldUnits;
+    const oldAvgPrice = trackedAsset.avgPrice;
 
     const totalCostOld = oldHeldUnits * oldAvgPrice;
-    const totalCostNew = units * order_price;
+    const totalCostNew = units * orderPrice;
     const totalUnits = oldHeldUnits + units;
 
-    trackedAsset.held_units = totalUnits;
-    trackedAsset.avg_price = (totalCostOld + totalCostNew) / totalUnits;
+    trackedAsset.heldUnits = totalUnits;
+    trackedAsset.avgPrice = (totalCostOld + totalCostNew) / totalUnits;
   }
 
   await trackedAsset.save();

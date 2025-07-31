@@ -5,7 +5,7 @@ async function handleSellAsset({
   TransactionModel,
   ticker,
   units,
-  order_price,
+  orderPrice,
   sellTransactionId,
   ownerId,
 }) {
@@ -27,7 +27,7 @@ async function handleSellAsset({
     );
   }
 
-  const heldUnits = trackedAsset.held_units;
+  const heldUnits = trackedAsset.heldUnits;
 
   if (units > heldUnits) {
     throw new Error(
@@ -36,10 +36,10 @@ async function handleSellAsset({
   }
 
   // Update tracked asset's units
-  trackedAsset.held_units -= units;
+  trackedAsset.heldUnits -= units;
 
-  if (trackedAsset.held_units === 0) {
-    trackedAsset.avg_price = 0;
+  if (trackedAsset.heldUnits === 0) {
+    trackedAsset.avgPrice = 0;
   }
 
   await trackedAsset.save();
@@ -51,7 +51,7 @@ async function handleSellAsset({
       ticker,
       units,
       ownerId,
-      sellPrice: order_price,
+      sellPrice: orderPrice,
       sellTransactionId,
     });
 

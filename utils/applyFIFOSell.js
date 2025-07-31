@@ -15,33 +15,33 @@ async function applyFifoSell({
       action: "buy",
       ticker,
       ownerId,
-      remaining_units: { $gt: 0 },
+      remainingUnits: { $gt: 0 },
     })
-    .sort({ order_date: 1 });
+    .sort({ orderDate: 1 });
 
   let totalCapitalGains = 0;
 
   for (const buy of buyTransactions) {
     if (unitsToSell === 0) break;
 
-    const available = buy.remaining_units;
+    const available = buy.remainingUnits;
     const toDeduct = Math.min(available, unitsToSell);
 
-    const gainPerUnit = sellPrice - buy.order_price;
+    const gainPerUnit = sellPrice - buy.orderPrice;
     const gainTotal = gainPerUnit * toDeduct;
     totalCapitalGains += gainTotal;
 
     await model.findByIdAndUpdate(buy._id, {
       $inc: {
-        remaining_units: -toDeduct,
-        sold_units: toDeduct,
+        remainingUnits: -toDeduct,
+        soldUnits: toDeduct,
       },
       $push: {
-        linked_sells: {
-          sellTransactionId,
+        linkedSells: {
+          sell_transaction_id: sellTransactionId,
           matchedUnits: toDeduct,
-          gainPerUnit,
-          gainTotal,
+          gainPerUnit: gainPerUnit,
+          gainTotal: gainTotal,
         },
       },
     });
@@ -49,10 +49,10 @@ async function applyFifoSell({
     matchedLots.push({
       buyTransactionId: buy._id,
       matchedUnits: toDeduct,
-      buyPrice: buy.order_price,
-      buyDate: buy.order_date,
-      gainPerUnit,
-      gainTotal,
+      buy_price: buy.orderPrice,
+      buy_date: buy.orderDate,
+      gainPerUnit: gainPerUnit,
+      gainTotal: gainTotal,
     });
 
     unitsToSell -= toDeduct;
@@ -68,13 +68,13 @@ async function applyFifoSell({
   // Update the sell transaction with linked buys
   await model.findByIdAndUpdate(sellTransactionId, {
     $set: {
-      linked_buys: matchedLots.map((lot) => ({
+      linkedBuys: matchedLots.map((lot) => ({
         buyTransactionId: lot.buyTransactionId,
         matchedUnits: lot.matchedUnits,
         gainPerUnit: lot.gainPerUnit,
         gainTotal: lot.gainTotal,
       })),
-      capital_gains: totalCapitalGains,
+      capitalGains: totalCapitalGains,
     },
   });
 

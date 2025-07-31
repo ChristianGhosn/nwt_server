@@ -2,34 +2,13 @@ const mongoose = require("mongoose");
 
 const trackedEtfSchema = new mongoose.Schema(
   {
-    ticker: {
-      type: String,
-      required: true,
-    },
-    held_units: {
-      type: Number,
-      default: 0,
-    },
-    avg_price: {
-      type: Number,
-      default: 0,
-    },
-    current_allocation: {
-      type: Number,
-      default: 0,
-    },
-    target_allocation: {
-      type: Number,
-      default: 0,
-    },
-    management_fee: {
-      type: Number,
-      default: 0,
-    },
-    ownerId: {
-      type: String,
-      required: true,
-    },
+    ticker: { type: String, required: true },
+    heldUnits: { type: Number, default: 0 },
+    avgPrice: { type: Number, default: 0 },
+    currentAllocation: { type: Number, default: 0 },
+    targetAllocation: { type: Number, default: 0 },
+    managementFee: { type: Number, default: 0 },
+    ownerId: { type: String, required: true },
   },
   { timestamps: true }
 );
@@ -42,16 +21,16 @@ const etfTransactionSchema = new mongoose.Schema(
       enum: ["buy", "sell"],
     },
     ticker: { type: String, required: true },
-    order_date: { type: Date, default: Date.now },
+    orderDate: { type: Date, default: Date.now },
     units: { type: Number, required: true },
-    order_price: { type: Number, required: true },
+    orderPrice: { type: Number, required: true },
     brokerage: { type: Number, default: 0 },
-    sold_units: { type: Number, default: 0 },
-    order_value: { type: Number, default: 0 },
-    remaining_units: { type: Number, default: 0 },
-    capital_gains: { type: Number, default: 0 },
+    soldUnits: { type: Number, default: 0 },
+    orderValue: { type: Number, default: 0 },
+    remainingUnits: { type: Number, default: 0 },
+    capitalGains: { type: Number, default: 0 },
     ownerId: { type: String, required: true },
-    linked_buys: [
+    linkedBuys: [
       {
         buyTransactionId: {
           type: mongoose.Schema.Types.ObjectId,
@@ -62,9 +41,9 @@ const etfTransactionSchema = new mongoose.Schema(
         gainTotal: Number,
       },
     ],
-    linked_sells: [
+    linkedSells: [
       {
-        sellTransactionId: {
+        sell_transaction_id: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "EtfTransaction",
         },
@@ -77,19 +56,15 @@ const etfTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// PRESAVE HOOK FOR ORDER VALUE, REMAINING BALANCE & REMAINING_UNITS (buy transaction)
+// PRESAVE HOOK FOR ORDER VALUE, REMAINING BALANCE & remainingUnits (buy transaction)
 etfTransactionSchema.pre("save", function (next) {
-  if (
-    this.isModified("units") ||
-    this.isModified("order_price") ||
-    this.isNew
-  ) {
-    this.order_value = Math.abs(this.units * this.order_price);
+  if (this.isModified("units") || this.isModified("orderPrice") || this.isNew) {
+    this.orderValue = Math.abs(this.units * this.orderPrice);
   }
 
-  // Only set remaining_units on creation for "buy" transactions
+  // Only set remainingUnits on creation for "buy" transactions
   if (this.isNew && this.action === "buy") {
-    this.remaining_units = this.units;
+    this.remainingUnits = this.units;
   }
 
   next();
