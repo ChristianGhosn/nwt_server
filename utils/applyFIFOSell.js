@@ -5,18 +5,23 @@ async function applyFifoSell({
   ownerId,
   sellPrice,
   sellTransactionId,
+  session,
 }) {
   let unitsToSell = units;
   const matchedLots = [];
   const updatedBuyTransactionIds = [];
 
   const buyTransactions = await model
-    .find({
-      action: "buy",
-      ticker,
-      ownerId,
-      remainingUnits: { $gt: 0 },
-    })
+    .find(
+      {
+        action: "buy",
+        ticker,
+        ownerId,
+        remainingUnits: { $gt: 0 },
+      },
+      null,
+      { session }
+    )
     .sort({ orderDate: 1 });
 
   let totalCapitalGains = 0;
@@ -31,20 +36,24 @@ async function applyFifoSell({
     const gainTotal = gainPerUnit * toDeduct;
     totalCapitalGains += gainTotal;
 
-    await model.findByIdAndUpdate(buy._id, {
-      $inc: {
-        remainingUnits: -toDeduct,
-        soldUnits: toDeduct,
-      },
-      $push: {
-        linkedSells: {
-          sell_transaction_id: sellTransactionId,
-          matchedUnits: toDeduct,
-          gainPerUnit: gainPerUnit,
-          gainTotal: gainTotal,
+    await model.findByIdAndUpdate(
+      buy._id,
+      {
+        $inc: {
+          remainingUnits: -toDeduct,
+          soldUnits: toDeduct,
+        },
+        $push: {
+          linkedSells: {
+            sell_transaction_id: sellTransactionId,
+            matchedUnits: toDeduct,
+            gainPerUnit: gainPerUnit,
+            gainTotal: gainTotal,
+          },
         },
       },
-    });
+      { session }
+    );
 
     matchedLots.push({
       buyTransactionId: buy._id,
@@ -66,24 +75,34 @@ async function applyFifoSell({
   }
 
   // Update the sell transaction with linked buys
-  await model.findByIdAndUpdate(sellTransactionId, {
-    $set: {
-      linkedBuys: matchedLots.map((lot) => ({
-        buyTransactionId: lot.buyTransactionId,
-        matchedUnits: lot.matchedUnits,
-        gainPerUnit: lot.gainPerUnit,
-        gainTotal: lot.gainTotal,
-      })),
-      capitalGains: totalCapitalGains,
+  await model.findByIdAndUpdate(
+    sellTransactionId,
+    {
+      $set: {
+        linkedBuys: matchedLots.map((lot) => ({
+          buyTransactionId: lot.buyTransactionId,
+          matchedUnits: lot.matchedUnits,
+          gainPerUnit: lot.gainPerUnit,
+          gainTotal: lot.gainTotal,
+        })),
+        capitalGains: totalCapitalGains,
+      },
     },
-  });
+    { session }
+  );
 
   // Fetch full updated buy transactions
-  const updatedBuyTransactions = await model.find({
-    _id: { $in: updatedBuyTransactionIds },
-  });
+  const updatedBuyTransactions = await model.find(
+    {
+      _id: { $in: updatedBuyTransactionIds },
+    },
+    null,
+    { session }
+  );
 
-  const updatedSellTransaction = await model.findById(sellTransactionId);
+  const updatedSellTransaction = await model.findById(sellTransactionId, null, {
+    session,
+  });
 
   return {
     updatedBuyTransactions,

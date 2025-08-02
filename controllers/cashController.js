@@ -74,16 +74,8 @@ const updateCash = async (req, res) => {
   // Find the cash entry by ID
   let cashEntry = await Cash.findById(id);
 
-  // Check if entry exists
-  if (!cashEntry) {
-    console.log(`Cash entry with ID: ${id} not found.`);
-    return res
-      .status(404)
-      .json({ success: false, message: "Cash entry not found" });
-  }
-
   // Authorization check: Ensure the authenticated user owns this entry
-  verifyOwnership(cashEntry, auth0Id, "cash entry");
+  verifyOwnership(cashEntry, auth0Id, "cash account entry");
 
   // --- Perform Validation for provided fields ---
   const validations = {};
@@ -122,19 +114,13 @@ const deleteCash = async (req, res) => {
   // Find the cash entry by ID
   const cashEntry = await Cash.findById(id);
 
-  // Check if entry exists
-  if (!cashEntry) {
-    console.log(`Cash entry with ID: ${id} not found for deletion.`);
-    return res.status(404).json({ message: "Cash entry not found" });
-  }
-
   // Authorization check: Ensure the authenticated user owns this entry
-  verifyOwnership(cashEntry, auth0Id, "cash entry");
+  verifyOwnership(cashEntry, auth0Id, "cash account");
 
   // Delete the entry
-  await Cash.deleteOne({ _id: id }); // Use deleteOne with the _id query
+  await Cash.deleteOne({ _id: id });
 
-  res.status(200).json({ message: "Cash entry deleted successfully" }); // 200 OK with success message
+  res.status(200).json({ message: "Cash account deleted successfully" }); // 200 OK with success message
 };
 
 module.exports = { getCash, createCash, updateCash, deleteCash };

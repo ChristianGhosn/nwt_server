@@ -4,10 +4,12 @@ async function reverseFifoSell({ model, sellTransaction }) {
   const updatedBuyTransactions = [];
 
   for (const lot of linkedBuys) {
-    const { buyTransactionId, matchedUnits, sell_transaction_id } = lot;
+    const { buyTransactionId, matchedUnits } = lot;
 
     const buy = await model.findById(buyTransactionId);
     if (!buy) continue;
+
+    const remainingUnitsBefore = buy.remainingUnits;
 
     // Remove the matching linkedSells entry
     buy.linkedSells = (buy.linkedSells || []).filter(
@@ -19,7 +21,7 @@ async function reverseFifoSell({ model, sellTransaction }) {
     buy.soldUnits -= matchedUnits;
 
     await buy.save();
-    updatedBuyTransactions.push(buy);
+    updatedBuyTransactions.push({ ...buy.toObject(), remainingUnitsBefore });
   }
 
   return updatedBuyTransactions;

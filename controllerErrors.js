@@ -18,13 +18,13 @@ const controllerError = (error) => {
     console.error("MongoDB Server Error Details:", error.code, error.codeName);
     return {
       success: false,
-      message: "Database connection or server error during creation.",
+      message: "Database connection or server error.",
       status: 500,
     };
   } else {
     return {
       success: false,
-      message: "Server error during cash creation.",
+      message: error.message || "Server error.",
       status: 500,
     };
   }

@@ -63,6 +63,21 @@ const validateOrderDate = (input) => {
     console.log("Validation Failed: Order date is required");
     errors.push("Order date is required");
   }
+
+  const date = new Date(input);
+  const now = new Date();
+
+  if (isNaN(date.getTime())) {
+    console.log("Validation Failed: Order date is not a valid date.");
+    errors.push("Order date must be a valid date.");
+    return errors;
+  }
+
+  if (date > now) {
+    console.log("Validation Failed: Order date cannot be in the future.");
+    errors.push("Order date cannot be in the future.");
+  }
+
   return errors;
 };
 

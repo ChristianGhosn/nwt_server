@@ -12,31 +12,53 @@ function normalizeTicker(ticker) {
   return ticker?.toUpperCase();
 }
 
-async function fetchAndValidateETFQuote(ticker) {
+async function fetchAndValidateETFQuote(tickers) {
   try {
-    const quoteDataArray = await yahooFinance.quote([ticker], {
-      fields: ["longName", "regularMarketPrice", "currency"],
+    if (!Array.isArray(tickers) || tickers.length === 0) {
+      throw new Error("tickers must not be an empty list");
+    }
+
+    const quotes = await yahooFinance.quote(tickers, {
+      fields: ["longName", "regularMarketPrice", "currency", "quoteType"],
     });
 
-    if (!quoteDataArray || quoteDataArray.length === 0 || !quoteDataArray[0]) {
-      throw new Error(`No data found for ticker: ${ticker}`);
+    if (!quotes || quotes.length === 0) {
+      throw new Error(`no quote data found for tickers: ${tickers.join(", ")}`);
     }
 
-    if (quoteDataArray.length > 1) {
-      throw new Error(
-        `Multiple results found for ticker: ${ticker}. Please provide a more specific ticker that matches only one ETF.`
+    const missingTickers = [];
+    const nonEtfTickers = [];
+    const validEtfQuotes = [];
+
+    tickers.forEach((ticker) => {
+      const quote = quotes.find(
+        (q) => q?.symbol?.toUpperCase() === ticker.toUpperCase()
       );
+
+      if (!quote) {
+        missingTickers.push(ticker);
+      } else if (quote.quoteType !== "ETF") {
+        nonEtfTickers.push(ticker);
+      } else {
+        validEtfQuotes.push(quote);
+      }
+    });
+
+    const errors = [];
+    if (missingTickers.length) {
+      errors.push(`no data found for: ${missingTickers.join(", ")}`);
+    }
+    if (nonEtfTickers.length) {
+      errors.push(`${nonEtfTickers.join(", ")} not an ETF`);
     }
 
-    const quote = quoteDataArray[0];
-
-    if (quote.quoteType !== "ETF") {
-      throw new Error(`${ticker} not an ETF`);
+    if (errors.length > 0) {
+      throw new Error(errors.join(" | "));
     }
 
-    return quote;
+    return validEtfQuotes;
   } catch (error) {
-    throw new Error("Invalid ticker");
+    throw new Error(`Failed to fetch ETF quotes, ${error.message}`);
   }
 }
 

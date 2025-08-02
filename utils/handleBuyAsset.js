@@ -4,15 +4,18 @@ async function handleBuyAsset({
   units,
   orderPrice,
   ownerId,
+  session,
+  quote,
 }) {
   if (!TrackedAssetModel || !ticker || !units || !orderPrice || !ownerId) {
     throw new Error("Missing required arguments to handleBuyTransaction");
   }
 
-  let trackedAsset = await TrackedAssetModel.findOne({
-    ticker,
-    ownerId,
-  });
+  let trackedAsset = await TrackedAssetModel.findOne(
+    { ticker, ownerId },
+    null,
+    { session }
+  );
 
   if (!trackedAsset) {
     // First-time buy — create new tracked asset
@@ -35,8 +38,21 @@ async function handleBuyAsset({
     trackedAsset.avgPrice = (totalCostOld + totalCostNew) / totalUnits;
   }
 
-  await trackedAsset.save();
-  return trackedAsset;
+  await trackedAsset.save({ session });
+
+  let updatedTransaction = null;
+
+  if (quote) {
+    const livePrice = quote.regularMarketPrice;
+    updatedTransaction = {
+      livePrice,
+      liveValue: livePrice * units,
+      capitalGains$: livePrice - orderPrice,
+      "capitalGains%": ((livePrice - orderPrice) / orderPrice) * 100,
+    };
+  }
+
+  return { trackedAsset, updatedTransaction };
 }
 
 module.exports = handleBuyAsset;
